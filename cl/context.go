@@ -115,6 +115,33 @@ func (ctx *Context) CreateProgramWithSource(sources []string) (*Program, error) 
 	return program, nil
 }
 
+func (ctx *Context) CreateProgramWithBinary(devices []*Device, binaries [][]byte) (*Program, error) {
+	cBinaries := make([]*C.uchar, len(binaries))
+	cBinariesSize := make([]C.size_t, len(binaries))
+
+	for i, b := range binaries {
+		cBinaries[i] = (*C.uchar)(unsafe.Pointer(&b[0]))
+		cBinariesSize[i] = (C.size_t)(len(b))
+	}
+
+	var err C.cl_int
+	var deviceList []C.cl_device_id
+	deviceList = buildDeviceIdList(devices)
+	var numberDevices C.cl_uint
+	numberDevices = C.cl_uint(len(devices))
+
+	clProgram := C.clCreateProgramWithBinary(ctx.clContext, numberDevices, &deviceList[0], &cBinariesSize[0], &cBinaries[0], nil, &err)
+	if err != C.CL_SUCCESS {
+		return nil, toError(err)
+	}
+	if clProgram == nil {
+		return nil, ErrUnknown
+	}
+	program := &Program{clProgram: clProgram, devices: ctx.devices}
+	runtime.SetFinalizer(program, releaseProgram)
+	return program, nil
+}
+
 func (ctx *Context) CreateBufferUnsafe(flags MemFlag, size int, dataPtr unsafe.Pointer) (*MemObject, error) {
 	var err C.cl_int
 	clBuffer := C.clCreateBuffer(ctx.clContext, C.cl_mem_flags(flags), C.size_t(size), dataPtr, &err)
